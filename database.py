@@ -222,6 +222,23 @@ class Database:
         except Exception as e:
             print(f"❌ Ошибка подсчета пользователей с ответами: {e}")
             return 0
+        
+    def get_user_by_username(self, username):
+        """Получает пользователя по username"""
+        try:
+            # Очищаем username от @
+            clean_username = username[1:] if username.startswith('@') else username
+            
+            self.cursor.execute('''
+            SELECT telegram_id, username, full_name 
+            FROM users 
+            WHERE username = ? OR username = ?
+            ''', (clean_username, f"@{clean_username}"))
+            
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"❌ Ошибка поиска пользователя: {e}")
+            return None
     
     def close(self):
         """Закрываем соединение с базой"""

@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
@@ -14,6 +15,12 @@ from dotenv import load_dotenv
 # Импортируем модули
 from database import Database
 from questions import TestEngine
+from valentines import (
+    ValentinesManager, 
+    get_valentine_menu_keyboard,
+    get_anonymity_keyboard,
+    get_photo_choice_keyboard
+)
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -42,6 +49,16 @@ dp = Dispatcher(storage=storage)
 class TestStates(StatesGroup):
     waiting_for_single_answer = State()  # Для вопросов с одним ответом
     waiting_for_multi_answer = State()   # Для вопросов с несколькими ответами
+
+
+valentines_manager = ValentinesManager(bot, db.conn)
+
+class ValentineStates(StatesGroup):
+    waiting_for_recipient = State()  # Ожидаем ввод получателя
+    waiting_for_message = State()    # Ожидаем текст валентинки
+    waiting_for_photo = State()      # Ожидаем фото (опционально)
+    waiting_for_anonymity = State()  # Ожидаем выбор анонимности
+
 
 # ========== КЛАВИАТУРЫ ==========
 def get_main_keyboard():
@@ -86,13 +103,10 @@ async def cmd_start(message: types.Message):
     # Приветственное сообщение
     welcome_text = (
         f"👋 Привет, {full_name}!\n\n"
-        f"Добро пожаловать в <b>тест на совместимость</b>!\n\n"
-        f"🎯 <b>Как это работает:</b>\n"
-        f"Пройди тест из {len(test_engine.questions)} вопросов, чтобы Бот мог определить совместимых с тобой людей 14 февраля!\n\n"
-        f"📝 <b>Инструкция:</b>\n"
-        f"• Выбирай варианты, которые тебе подходят\n"
-        f"• Для вопросов с несколькими вариантами можно указать несколько, последовательно выбрав их, после чего нажать '✅ Далее', чтобы перейти к следующему вопросу\n\n"
-        f"Готов начать? Нажми '📝 Пройти тест'!"
+        f"Добро пожаловать в <b>HitsLoversBot</b>!\n\n"
+        f"🎯 <b>Как это работает:</b>\n\n"
+        f"📝 Здесь ты можешь пройти тест из {len(test_engine.questions)} вопросов, чтобы 14 февраля Бот мог определить совместимых с тобой людей!\n\n"
+        f"💌 Кроме этого, уже сейчас ты можешь отправить праздничные валентинки людям, которые тоже активировали бота!"
     )
     
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
@@ -406,21 +420,286 @@ async def find_matches_handler(message: types.Message):
     
     await message.answer(text, reply_markup=get_main_keyboard())
 
-@dp.message(lambda message: message.text == "❓ Инфо")
-async def cmd_help(message: types.Message):
-    """Команда помощи"""
-    help_text = (
-        "📝 <b>Пройти тест</b> - начать тест на совместимость\n"
-        "📊 <b>Мои ответы</b> - посмотреть список ваших последниъ ответов\n"
-        "❓ <b>Как проходить тест:</b>\n"
-        "• Для вопросов с одним вариантом ответа - выберите только один из них\n"
-        "• Для вопросов с несколькими вариантами - можно выбрать несколько\n"
-        "• В вопросах с несколькими вариантами нажмите '✅ Далее' чтобы продолжить\n\n"
-        "🎯 <b>День X</b>\n"
-        "14 февраля вы сможете найти людей, совместимых с вами\n"
-        "по результатам теста \n"
+def get_main_keyboard():
+    """Основная клавиатура после регистрации"""
+    buttons = [
+        [KeyboardButton(text="📝 Пройти тест"), KeyboardButton(text="📊 Мои ответы")],
+        [KeyboardButton(text="💌 Валентинки")],
+        #[KeyboardButton(text="🔍 Найти пару")],
+        #[KeyboardButton(text="❓ Инфо")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+@dp.message(lambda message: message.text == "💌 Валентинки")
+async def valentines_menu(message: types.Message):
+    """Главное меню валентинок"""
+    text = (
+        "💝 <b>Отправка валентинок</b>\n\n"
+        "Здесь ты можешь отправить анонимное или открытое "
+        "поздравление пользователю, зарегистрированному в боте!\n\n"
+        "✨ <b>Как это работает:</b>\n"
+        "1️⃣ Введи никнейм получателя\n"
+        "2️⃣ Напиши текст валентинки\n"
+        "3️⃣ Добавь фото (по желанию)\n"
+        "4️⃣ Выбери: анонимно или открыто\n\n"
     )
-    await message.answer(help_text, reply_markup=get_main_keyboard())
+    
+    # Создаем клавиатуру
+    buttons = [
+        [InlineKeyboardButton(text="💌 Отправить валентинку", callback_data="send_valentine")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await message.answer(text, reply_markup=keyboard)
+
+@dp.callback_query(lambda c: c.data == "back_to_valentines")
+async def back_to_valentines(callback: CallbackQuery):
+    """Возврат в меню валентинок"""
+    await callback.answer()
+    await valentines_menu(callback.message)
+
+@dp.callback_query(lambda c: c.data == "send_valentine")
+async def start_send_valentine(callback: CallbackQuery, state: FSMContext):
+    """Начинаем процесс отправки валентинки"""
+    await callback.answer()
+    await state.set_state(ValentineStates.waiting_for_recipient)
+    
+    text = (
+        "✏️ <b>Отправка валентинки - Шаг 1/4</b>\n\n"
+        "Введите <b>никнейм</b> получателя в Telegram:\n"
+        "⚠️ Получатель должен быть зарегистрирован в боте\n\n"
+        "🚪 Отправьте /cancel чтобы отменить"
+    )
+    
+    await callback.message.answer(text)
+
+@dp.message(ValentineStates.waiting_for_recipient)
+async def process_recipient(message: types.Message, state: FSMContext):
+    """Обработка ввода получателя"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer(
+            "❌ Отправка отменена", 
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    username = message.text.strip()
+    
+    # Проверяем формат username
+    if not valentines_manager.validate_username(username):
+        await message.answer(
+            "❌ <b>Некорректный формат никнейма!</b>\n\n"
+        )
+        return
+    
+    # Сохраняем получателя
+    await state.update_data(recipient_username=username)
+    await state.set_state(ValentineStates.waiting_for_message)
+    
+    formatted_username = valentines_manager.format_username(username)
+    await message.answer(
+        f"✅ Получатель: <b>{formatted_username}</b>\n\n"
+        f"📝 <b>Шаг 2/4</b> - Введите текст валентинки:"
+    )
+
+@dp.message(ValentineStates.waiting_for_message)
+async def process_message_text(message: types.Message, state: FSMContext):
+    """Обработка текста валентинки"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отправка отменена", reply_markup=get_main_keyboard())
+        return
+    
+    text = message.text.strip()
+    
+    if len(text) > 500:
+        await message.answer("❌ Текст слишком длинный (максимум 500 символов). Сократите сообщение!")
+        return
+    
+    # Сохраняем текст
+    await state.update_data(message_text=text)
+    await state.set_state(ValentineStates.waiting_for_photo)
+    
+    buttons = [
+        [InlineKeyboardButton(text="📸 Добавить фото", callback_data="add_photo")],
+        [InlineKeyboardButton(text="⏩ Пропустить", callback_data="skip_photo")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await message.answer(
+        "📸 <b>Шаг 3/4</b> - Хотите добавить фото?\n\n"
+        "Вы можете прикрепить изображение к валентинке!",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query(lambda c: c.data == "add_photo")
+async def add_photo(callback: CallbackQuery, state: FSMContext):
+    """Запрос на добавление фото"""
+    await callback.answer()
+    await state.set_state(ValentineStates.waiting_for_photo)
+    await callback.message.answer(
+        "📸 Отправьте фото, которое хотите прикрепить к валентинке, "
+        "или нажмите 'Пропустить'"
+    )
+
+@dp.callback_query(lambda c: c.data == "skip_photo")
+async def skip_photo(callback: CallbackQuery, state: FSMContext):
+    """Пропуск добавления фото"""
+    await callback.answer()
+    await state.update_data(photo=None)
+    await state.set_state(ValentineStates.waiting_for_anonymity)
+    
+    buttons = [
+        [
+            InlineKeyboardButton(text="🕵️ Анонимно", callback_data="send_anonymous"),
+            InlineKeyboardButton(text="👤 Открыто", callback_data="send_open")
+        ],
+        [InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel_send")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.answer(
+        "🕵️ <b>Шаг 4/4</b> - Выберите режим отправки:\n\n"
+        "• <b>Анонимно</b> - получатель не узнает, кто отправитель\n"
+        "• <b>Открыто</b> - получатель увидит ваше имя",
+        reply_markup=keyboard
+    )
+
+@dp.message(ValentineStates.waiting_for_photo)
+async def process_photo(message: types.Message, state: FSMContext):
+    """Обработка полученного фото"""
+    if message.text and message.text.lower() == "пропустить":
+        await state.update_data(photo=None)
+        await state.set_state(ValentineStates.waiting_for_anonymity)
+        
+        buttons = [
+            [
+                InlineKeyboardButton(text="🕵️ Анонимно", callback_data="send_anonymous"),
+                InlineKeyboardButton(text="👤 Открыто", callback_data="send_open")
+            ],
+            [InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel_send")]
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await message.answer(
+            "🕵️ <b>Шаг 4/4</b> - Выберите режим отправки:",
+            reply_markup=keyboard
+        )
+        return
+    
+    if message.photo:
+        # Сохраняем фото
+        await state.update_data(photo=message.photo)
+        await state.set_state(ValentineStates.waiting_for_anonymity)
+        
+        buttons = [
+            [
+                InlineKeyboardButton(text="🕵️ Анонимно", callback_data="send_anonymous"),
+                InlineKeyboardButton(text="👤 Открыто", callback_data="send_open")
+            ],
+            [InlineKeyboardButton(text="🔙 Отмена", callback_data="cancel_send")]
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await message.answer(
+            "✅ Фото добавлено!\n\n"
+            "🕵️ <b>Шаг 4/4</b> - Выберите режим отправки:",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer(
+            "❌ Пожалуйста, отправьте фото или нажмите 'Пропустить'"
+        )
+
+@dp.callback_query(lambda c: c.data == "send_anonymous")
+async def send_anonymous_valentine(callback: CallbackQuery, state: FSMContext):
+    """Отправка анонимной валентинки"""
+    await callback.answer()
+    await send_valentine(callback, state, is_anonymous=True)
+
+@dp.callback_query(lambda c: c.data == "send_open")
+async def send_open_valentine(callback: CallbackQuery, state: FSMContext):
+    """Отправка открытой валентинки"""
+    await callback.answer()
+    await send_valentine(callback, state, is_anonymous=False)
+
+@dp.callback_query(lambda c: c.data == "cancel_send")
+async def cancel_send_valentine(callback: CallbackQuery, state: FSMContext):
+    """Отмена отправки"""
+    await callback.answer()
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ Отправка валентинки отменена",
+        reply_markup=None
+    )
+
+async def send_valentine(callback: CallbackQuery, state: FSMContext, is_anonymous: bool):
+    """Функция отправки валентинки"""
+    try:
+        data = await state.get_data()
+        recipient_username = data.get('recipient_username')
+        message_text = data.get('message_text')
+        photo = data.get('photo')
+        
+        # Отправляем валентинку
+        if photo:
+            result = await valentines_manager.send_valentine_with_photo(
+                sender_id=callback.from_user.id,
+                recipient_username=recipient_username,
+                message_text=message_text,
+                photo=photo,
+                is_anonymous=is_anonymous
+            )
+        else:
+            result = await valentines_manager.send_valentine(
+                sender_id=callback.from_user.id,
+                recipient_username=recipient_username,
+                message_text=message_text,
+                is_anonymous=is_anonymous
+            )
+        
+            await callback.message.edit_text(
+                result['message'],
+                reply_markup=None
+            )
+
+        await state.clear()
+    except Exception as e:
+        await state.clear()
+        await callback.message.edit_text(
+            f"❌ Произошла ошибка при отправке: {str(e)}",
+            reply_markup=None
+        )
+
+# ========== ПРОСТОЙ ОБРАБОТЧИК НЕИЗВЕСТНЫХ КОМАНД ==========
+@dp.message()
+async def handle_everything_else(message: types.Message, state: FSMContext):
+    """Простой обработчик всех непонятных сообщений"""
+    
+    # Проверяем, не в процессе ли теста пользователь
+    current_state = await state.get_state()
+    if current_state:
+        return
+    
+    # Игнорируем команды и кнопки меню
+    if message.text and (
+        message.text.startswith('/') or 
+        message.text in ["📝 Пройти тест", "📊 Мои ответы", "💌 Валентинки"]
+    ):
+        return
+    
+    # Игнорируем не-текстовые сообщения
+    if not message.text:
+        return
+    
+    # Отвечаем универсальной фразой
+    await message.answer(
+        "❌ Некорректный запрос.\n"
+        "Пожалуйста, используйте кнопки меню или команду /start",
+        reply_markup=get_main_keyboard()
+    )
+
 
 # ========== ЗАПУСК БОТА ==========
 async def main():
