@@ -91,7 +91,7 @@ def create_options_keyboard(question_data, question_index):
 
 # ========== ОБРАБОТЧИКИ ==========
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
     """Обработка команды /start"""
     user_id = message.from_user.id
     username = message.from_user.username
@@ -100,6 +100,8 @@ async def cmd_start(message: types.Message):
     # Регистрируем пользователя
     db.register_user(user_id, username, full_name)
     
+    state.clear()
+
     # Приветственное сообщение
     welcome_text = (
         f"👋 Привет, {full_name}!\n\n"
