@@ -41,6 +41,7 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 class TestStates(StatesGroup):
+    not_waiting = State()
     waiting_for_single_answer = State()
     waiting_for_multi_answer = State()
 
@@ -83,7 +84,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     
     db.register_user(user_id, username, full_name)
     
-    state.clear()
+    state.set_state(TestStates.not_waiting)
 
     welcome_text = (
         f"👋 Привет, {full_name}!\n\n"
@@ -92,7 +93,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
         f"📝 Здесь ты можешь пройти тест из {len(test_engine.questions)} вопросов, чтобы 14 февраля Бот мог определить совместимых с тобой людей!\n\n"
         f"💌 Кроме этого, уже сейчас ты можешь отправить праздничные валентинки людям, которые тоже активировали бота!\n\n"
         f"🔧 Техподдержка: @MerlinLokot"
-
     )
     
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
@@ -171,11 +171,7 @@ async def process_multi_answer(message: types.Message, state: FSMContext):
     answers = data.get('answers', {})
 
     question_data = test_engine.get_question(current_q)
-    if not question_data:
-        await message.answer("Ошибка: вопрос не найден.")
-        await state.clear()
-        return
-    
+
     answer_text = message.text.strip()
 
     if answer_text == "✅ Далее":
