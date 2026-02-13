@@ -3,7 +3,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 class Database:
-    def init(self):
+    def __init__(self):
         DATABASE_URL = os.getenv("DATABASE_URL")
 
         if not DATABASE_URL:
