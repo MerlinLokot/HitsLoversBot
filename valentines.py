@@ -9,11 +9,12 @@ class ValentinesManager:
         """
         Инициализация менеджера валентинок
         bot: экземпляр бота для отправки сообщений
-        db_connection: соединение с БД для проверки регистрации
+        db_connection: экземпляр вашего класса Database
         """
         self.bot = bot
-        self.conn = db_connection
-        self.cursor = db_connection.cursor()
+        self.db = db_connection
+        self.conn = db_connection.conn
+        self.cursor = db_connection.cursor
     
     async def send_valentine(self, sender_id: int, recipient_username: str, 
                             message_text: str, image_url: Optional[str] = None,
@@ -40,7 +41,7 @@ class ValentinesManager:
             self.cursor.execute('''
                 SELECT id, telegram_id, username, full_name 
                 FROM users 
-                WHERE username = ? OR username = ?
+                WHERE username = %s OR username = %s
             ''', (clean_username, f"@{clean_username}"))
             
             recipient = self.cursor.fetchone()
@@ -58,7 +59,7 @@ class ValentinesManager:
             else:
                 # Получаем имя отправителя
                 self.cursor.execute('''
-                    SELECT full_name, username FROM users WHERE telegram_id = ?
+                    SELECT full_name, username FROM users WHERE telegram_id = %s
                 ''', (sender_id,))
                 sender = self.cursor.fetchone()
                 if sender:
