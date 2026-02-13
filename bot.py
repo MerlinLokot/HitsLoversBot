@@ -664,6 +664,20 @@ async def send_valentine(callback: CallbackQuery, state: FSMContext, is_anonymou
                 reply_markup=None
             )
 
+        if not result['success']:
+ 
+            # Показываем понятное сообщение об ошибке
+            error_text = result['message'] + "\n\nВыберите действие:"
+            
+            # Создаем клавиатуру для повторной попытки или возврата в меню
+            buttons = [
+                [InlineKeyboardButton(text="💌 Попробовать снова", callback_data="send_valentine")]
+            ]
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            
+            await callback.message.edit_text(error_text, reply_markup=keyboard)
+            return
+
         await state.clear()
     except Exception as e:
         await state.clear()
