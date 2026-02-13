@@ -102,10 +102,7 @@ async def start_test(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
 
     current_state = await state.get_state()
-    if current_state != TestStates.not_waiting:
-        await message.answer("Тест уже начат. Продолжайте отвечать на вопросы.")
-        return
-
+    
     await state.update_data(
         current_question=0,
         answers={}
