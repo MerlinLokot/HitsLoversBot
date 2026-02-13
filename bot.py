@@ -659,10 +659,10 @@ async def send_valentine(callback: CallbackQuery, state: FSMContext, is_anonymou
                 is_anonymous=is_anonymous
             )
         
-            await callback.message.edit_text(
-                result['message'],
-                reply_markup=None
-            )
+        await callback.message.edit_text(
+            result['message'],
+            reply_markup=None
+        )
 
         if not result['success']:
  
