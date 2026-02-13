@@ -13,7 +13,7 @@ class ValentinesManager:
         """
         self.bot = bot
         self.db = db_connection
-        self.conn = db_connection.conn
+        self.conn = db_connection.pgconn
         self.cursor = db_connection.cursor
     
     async def send_valentine(self, sender_id: int, recipient_username: str, 
