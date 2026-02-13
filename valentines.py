@@ -4,6 +4,9 @@ from typing import Optional, Dict, List
 import asyncio
 import re
 
+import psycopg
+from psycopg.rows import dict_row
+
 class ValentinesManager:
     def __init__(self, bot: Bot, db_connection):
         """
@@ -12,8 +15,7 @@ class ValentinesManager:
         db_connection: экземпляр вашего класса Database
         """
         self.bot = bot
-        self.db = db_connection
-        self.cursor = db_connection.cursor  # Это уже курсор, не метод!
+        self.cursor = db_connection.cursor(row_factory=psycopg.rows.dict_row)
     
     async def send_valentine(self, sender_id: int, recipient_username: str, 
                             message_text: str, image_url: Optional[str] = None,
