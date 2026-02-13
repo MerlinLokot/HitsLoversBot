@@ -15,7 +15,6 @@ class Database:
         self._init_db()
 
     def _init_db(self):
-        # USERS
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -26,7 +25,6 @@ class Database:
         )
         """)
 
-        # ANSWERS
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_answers (
             id SERIAL PRIMARY KEY,
@@ -36,7 +34,6 @@ class Database:
         )
         """)
 
-        # MATCHES
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS matches (
             id SERIAL PRIMARY KEY,
@@ -51,7 +48,6 @@ class Database:
         self.conn.commit()
         print("✅ PostgreSQL база данных инициализирована")
 
-    # ================= USERS =================
 
     def register_user(self, telegram_id, username, full_name):
         try:
@@ -88,8 +84,6 @@ class Database:
         """, (clean_username, f"@{clean_username}"))
 
         return self.cursor.fetchone()
-
-    # ================= ANSWERS =================
 
     def save_user_answers(self, telegram_id, answers_json):
         try:
@@ -138,8 +132,6 @@ class Database:
         """)
 
         return self.cursor.fetchall()
-
-    # ================= MATCHES =================
 
     def save_match(self, user1_id, user2_id, similarity_score):
         if user1_id > user2_id:
@@ -196,8 +188,6 @@ class Database:
             }
             for row in self.cursor.fetchall()
         ]
-
-    # ================= CLOSE =================
 
     def close(self):
         if self.conn:
