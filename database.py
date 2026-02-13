@@ -1,5 +1,6 @@
 import os
 import psycopg
+from psycopg.rows import dict_row
 
 class Database:
     def init(self):
@@ -7,9 +8,9 @@ class Database:
 
         if not DATABASE_URL:
             raise Exception("❌ DATABASE_URL не найден. Добавьте PostgreSQL в Railway.")
-
-        self.conn = psycopg2.connect(DATABASE_URL)
-        self.cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        self.conn = psycopg.connect(DATABASE_URL)
+        self.cursor = self.conn.cursor(row_factory=psycopg.rows.dict_row)
 
         self._init_db()
 
