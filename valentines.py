@@ -13,7 +13,7 @@ class ValentinesManager:
         """
         self.bot = bot
         self.db = db_connection
-        self.conn = db_connection.pgconn
+        self.cursor = db_connection.cursor  # Это уже курсор, не метод!
     
     async def send_valentine(self, sender_id: int, recipient_username: str, 
                             message_text: str, image_url: Optional[str] = None,
@@ -37,14 +37,13 @@ class ValentinesManager:
                 clean_username = recipient_username
             
             # Проверяем, зарегистрирован ли пользователь в боте
-            cursor = self.conn.cursor()
-            cursor.execute('''
+            self.cursor.execute('''
                 SELECT id, telegram_id, username, full_name 
                 FROM users 
                 WHERE username = %s OR username = %s
             ''', (clean_username, f"@{clean_username}"))
             
-            recipient = cursor.fetchone()
+            recipient = self.cursor.fetchone()
             
             if not recipient:
                 result['error'] = 'user_not_found'
@@ -58,10 +57,10 @@ class ValentinesManager:
                 sender_name = "👤 Анонимный отправитель"
             else:
                 # Получаем имя отправителя
-                cursor.execute('''
+                self.cursor.execute('''
                     SELECT full_name, username FROM users WHERE telegram_id = %s
                 ''', (sender_id,))
-                sender = cursor.fetchone()
+                sender = self.cursor.fetchone()
                 if sender:
                     sender_name = f"@{sender['username']}"
                 else:
