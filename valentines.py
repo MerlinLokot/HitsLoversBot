@@ -36,11 +36,6 @@ class ValentinesManager:
             
             recipient = self.cursor.fetchone()
             
-            if not recipient:
-                result['error'] = 'user_not_found'
-                result['message'] = f"❌ Пользователь @{clean_username} не зарегистрирован в боте"
-                return result
-            
             recipient_id = recipient['telegram_id']
 
             if is_anonymous:

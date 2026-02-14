@@ -74,6 +74,22 @@ class Database:
         """)
         return self.cursor.fetchone()["count"]
 
+    def is_registered(self, username):
+        clean_username = username[1:] if username.startswith('@') else username
+
+        self.cursor.execute("""
+            SELECT telegram_id, username, full_name
+            FROM users
+            WHERE username = %s OR username = %s
+        """, (clean_username, f"@{clean_username}"))
+
+        user = self.cursor.fetchone()
+
+        if user:
+            return True
+        else:
+            return False
+
     def get_user_by_username(self, username):
         clean_username = username[1:] if username.startswith('@') else username
 
@@ -132,6 +148,15 @@ class Database:
         """)
 
         return self.cursor.fetchall()
+
+    async def get_all_user_ids(self):
+        self.cursor.execute('SELECT telegram_id FROM users')
+
+        result = self.cursor.fetchall()
+
+        user_ids = [row['telegram_id'] for row in result]
+        
+        return user_ids
 
     def save_match(self, user1_id, user2_id, similarity_score):
         if user1_id > user2_id:

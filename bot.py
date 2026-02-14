@@ -54,12 +54,8 @@ class ValentineStates(StatesGroup):
     waiting_for_photo = State()
     waiting_for_anonymity = State()
 
-def get_main_keyboard():
-    buttons = [
-        [KeyboardButton(text="📝 Пройти тест")],
-        [KeyboardButton(text="📊 Мои ответы")] #KeyboardButton(text="🔍 Найти пару")],
-    ]
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+class CompatibilityStates(StatesGroup):
+    waiting_for_username = State()
 
 def create_options_keyboard(question_data, question_index):
     question_type = question_data['type']
@@ -78,13 +74,13 @@ def create_options_keyboard(question_data, question_index):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    #await broadcast_message()
+
     user_id = message.from_user.id
     username = message.from_user.username
     full_name = message.from_user.full_name
     
     db.register_user(user_id, username, full_name)
-    
-    state.set_state(TestStates.not_waiting)
 
     welcome_text = (
         f"👋 Привет, {full_name}!\n\n"
@@ -100,8 +96,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
 @dp.message(lambda message: message.text == "📝 Пройти тест")
 async def start_test(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-
-    current_state = await state.get_state()
+    username = message.from_user.username
+    full_name = message.from_user.full_name
+    
+    db.register_user(user_id, username, full_name)
     
     await state.update_data(
         current_question=0,
@@ -294,19 +292,22 @@ async def show_my_answers(message: types.Message):
     
     await message.answer(text, reply_markup=get_main_keyboard())
 
-#@dp.message(lambda message: message.text == "🔍 Найти пару")
-async def find_matches_handler(message: types.Message):
+@dp.message(lambda message: message.text == "✨ Совместимость")
+async def find_matches_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
+    # Получаем ответы пользователя
     answers_json = db.get_user_answers(user_id)
     
     if not answers_json:
         await message.answer(
-            "Сначала пройдите тест, чтобы найти похожих людей!",
+            "Сначала пройдите тест, чтобы найти совместимых людей\n\n"
+            "⚠️ Если же вы уже проходили тест, к сожалению, Бот не смог сохранить ваши ответы 😞 Но всё в порядке! Просто пройдите тест заново, и в этот раз результаты точно не пропадут!",
             reply_markup=get_main_keyboard()
         )
         return
 
+    # Получаем всех пользователей с ответами
     all_users = db.get_all_users_with_answers()
     
     if len(all_users) < 2:
@@ -319,6 +320,7 @@ async def find_matches_handler(message: types.Message):
 
     user_answers = test_engine.deserialize_answers(answers_json)
 
+    # Рассчитываем совместимость
     matches = []
     for other_user in all_users:
         if other_user['telegram_id'] == user_id:
@@ -334,29 +336,196 @@ async def find_matches_handler(message: types.Message):
             'similarity': similarity
         })
 
+    # Сортируем по убыванию совместимости
     matches.sort(key=lambda x: x['similarity'], reverse=True)
+    
+    # Сохраняем в состояние для дальнейшего использования
+    await state.update_data(matches_list=matches)
 
     if matches:
-        text = "👥 <b>Найденные совпадения:</b>\n\n"
+        # Создаём клавиатуру с двумя вариантами
+        buttons = [
+            [InlineKeyboardButton(text="🌟 ТОП совместимых", callback_data="show_top_matches")],
+            [InlineKeyboardButton(text="🔮 Проверить совместимость с..", callback_data="check_specific_person")]
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         
-        for i, match in enumerate(matches[:5]):
-            percent = int(match['similarity'] * 100)
-            name = match['full_name'] or match['username'] or f"Пользователь {match['telegram_id']}"
-            text += f"{i+1}. <b>{name}</b> - {percent}% совпадения\n"
+        text = (
+            "✨ <b>Отлично! Результаты тестов на совместимость проанализированы!</b>\n\n"
+            "Выберите, что хотите сделать:"
+        )
         
-        text += f"\n📊 <b>Всего найдено:</b> {len(matches)} человек"
-        text += f"\n\n💡 <i>Совпадение считается от 60% и выше</i>"
+        await message.answer(text, reply_markup=keyboard)
     else:
-        text = "😔 Пока не найдено пользователей с высокой схожестью.\n\n"
-        text += "Попробуйте позже или пригласите больше друзей пройти тест!"
+        await message.answer(
+            "😔 Пока не найдено пользователей для сравнения.\n\n"
+            "Пригласите друзей пройти тест!",
+            reply_markup=get_main_keyboard()
+        )
+
+@dp.callback_query(lambda c: c.data == "show_top_matches")
+async def show_top_matches(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     
-    await message.answer(text, reply_markup=get_main_keyboard())
+    data = await state.get_data()
+    matches = data.get('matches_list', [])
+    
+    if not matches:
+        await callback.message.edit_text(
+            "❌ Данные не найдены. Попробуйте снова.",
+            reply_markup=None
+        )
+        return
+    
+    text = "⚡ <b>Вау! Вот с какими людьми у тебя наибольшая совместимость! </b>\n\n"
+    
+    for i, match in enumerate(matches[:5], 1):
+        percent = int(match['similarity'] * 100)
+        
+        # Визуальный прогресс-бар
+        filled = "🟩" * (percent // 10)
+        empty = "🟦" * (10 - (percent // 10))
+        progress = f"{filled}{empty}"
+        
+        # Формируем имя
+        if match.get('full_name'):
+            name = match['full_name']
+            if match.get('username'):
+                name += f" (@{match['username']})"
+        elif match.get('username'):
+            name = f"@{match['username']}"
+        else:
+            name = f"Пользователь {match['telegram_id']}"
+        
+        # Медаль за место
+        if i == 1:
+            medal = "🥇"
+        elif i == 2:
+            medal = "🥈"
+        elif i == 3:
+            medal = "🥉"
+        else:
+            medal = "🌟"
+        
+        text += f"{medal} <b>{i}. {name}</b>\n"
+        text += f"   <code>{progress}</code> <b>{percent}%</b>\n\n"
+    
+    text += "\n💫 Как здорово, когда есть люди, с которыми ты на одной волне!"
+    
+    # Кнопка для возврата
+    buttons = [[InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_compatibility_menu")]]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.edit_text(text)
+
+@dp.callback_query(lambda c: c.data == "check_specific_person")
+async def ask_for_username(callback: CallbackQuery, state: FSMContext):
+    """Запрашивает username для проверки совместимости"""
+    await callback.answer()
+    
+    await state.set_state(CompatibilityStates.waiting_for_username)
+    
+    text = (
+        "🔍 <b>Проверка совместимости</b>\n\n"
+        "Введите <b>никнейм</b> получателя в Telegram:\n"
+        "🚪 Отправьте /cancel чтобы отменить"
+    )
+    
+    await callback.message.edit_text(text, reply_markup=None)
+
+@dp.message(CompatibilityStates.waiting_for_username)
+async def check_specific_person(message: types.Message, state: FSMContext):
+    """Проверяет совместимость с конкретным пользователем"""
+    username = message.text.strip()
+    
+    # Очищаем username
+    clean_username = username[1:] if username.startswith('@') else username
+    
+    # Получаем данные пользователя
+    target_user = db.get_user_by_username(clean_username)
+    
+    if not target_user:
+        await message.answer(
+            f"❌ Пользователь @{clean_username} не найден в базе.\n\n"
+            "Убедитесь, что он зарегистрирован в боте и прошел тест.",
+            reply_markup=get_main_keyboard()
+        )
+        await state.clear()
+        return
+    
+    # Получаем ответы текущего пользователя
+    current_user_id = message.from_user.id
+    current_answers_json = db.get_user_answers(current_user_id)
+    
+    if not current_answers_json:
+        await message.answer(
+            "❌ Сначала пройдите тест!",
+            reply_markup=get_main_keyboard()
+        )
+        await state.clear()
+        return
+    
+    # Получаем ответы целевого пользователя
+    target_answers_json = db.get_user_answers(target_user['telegram_id'])
+    
+    if not target_answers_json:
+        await message.answer(
+            f"❌ Пользователь @{clean_username} ещё не прошел тест.",
+            reply_markup=get_main_keyboard()
+        )
+        await state.clear()
+        return
+    
+    # Рассчитываем совместимость
+    current_answers = test_engine.deserialize_answers(current_answers_json)
+    target_answers = test_engine.deserialize_answers(target_answers_json)
+    
+    similarity = test_engine.calculate_similarity(current_answers, target_answers)
+    percent = int(similarity * 100)
+    
+    # Визуальный прогресс-бар
+    filled = "🟩" * (percent // 10)
+    empty = "🟦" * (10 - (percent // 10))
+    progress = f"{filled}{empty}"
+    
+    # Формируем имя
+    if target_user.get('full_name'):
+        name = target_user['full_name']
+        if target_user.get('username'):
+            name += f" (@{target_user['username']})"
+    else:
+        name = f"@{target_user['username']}"
+    
+    text = (
+        f"<b>Результат совместимости!</b>\n\n"
+        f"🌟 {name}\n\n"
+        f"  <code>{progress}</code> <b>{percent}%</b>\n\n"
+    )
+    
+    # Кнопки для действий
+    buttons = [
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="show_top_matches")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await message.answer(text)
+    await state.clear()
+
+@dp.callback_query(lambda c: c.data == "back_to_compatibility_menu")
+async def back_to_compatibility_menu(callback: CallbackQuery, state: FSMContext):
+    """Возврат в меню совместимости"""
+    await callback.answer()
+    await state.clear()
+    
+    # Вызываем заново обработчик совместимости
+    message = callback.message
+    message.text = "✨ Совместимость"
+    await find_matches_handler(message, state)
 
 def get_main_keyboard():
     buttons = [
         [KeyboardButton(text="📝 Пройти тест"), KeyboardButton(text="📊 Мои ответы")],
-        [KeyboardButton(text="💌 Валентинки")],
-        #[KeyboardButton(text="🔍 Найти пару")],
+        [KeyboardButton(text="💌 Валентинки"), KeyboardButton(text="✨ Совместимость")],
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
@@ -414,6 +583,12 @@ async def process_recipient(message: types.Message, state: FSMContext):
     if not valentines_manager.validate_username(username):
         await message.answer(
             "❌ <b>Некорректный формат никнейма!</b>\n\n"
+        )
+        return
+    
+    if not db.is_registered(username):
+        await message.answer(
+            f"❌ Пользователь {username} не зарегистрирован в боте\n\n"
         )
         return
 
@@ -595,6 +770,35 @@ async def send_valentine(callback: CallbackQuery, state: FSMContext, is_anonymou
             reply_markup=None
         )
 
+@dp.message(Command("broadcast"))
+async def broadcast_message(message: types.Message):
+    BATCH_SIZE = 20  # чуть меньше максимума для надежности
+    DELAY = 1.1  # чуть больше секунды
+
+    MESSAGE = (
+        "🔥 <b>Вот и настал момент!</b> "
+        "💘 <b>14 февраля</b> 💘\n\n"
+        "✨ Раздел «Совместимость» доступен в главном меню"
+    )
+
+    users = await db.get_all_user_ids()
+    
+    print(f"Начинаю рассылку для {len(users)} пользователей")
+    
+    for i, user_id in enumerate(users, 1):
+        try:
+            await bot.send_message(user_id, MESSAGE, reply_markup=get_main_keyboard())
+            print(f"✓ {i}/{len(users)}", end='\r')
+            
+            if i % BATCH_SIZE == 0:
+                await asyncio.sleep(DELAY)
+                
+        except Exception as e:
+            error_msg = f"Ошибка для {user_id}: {e}"
+            print(f"\n{error_msg}")
+    
+    print(f"\n✅ Рассылка завершена!")
+
 @dp.message()
 async def handle_everything_else(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -603,7 +807,7 @@ async def handle_everything_else(message: types.Message, state: FSMContext):
 
     if message.text and (
         message.text.startswith('/') or 
-        message.text in ["📝 Пройти тест", "📊 Мои ответы", "💌 Валентинки"]
+        message.text in ["📝 Пройти тест", "📊 Мои ответы", "💌 Валентинки", "✨ Совместимость"]
     ):
         return
 
@@ -615,6 +819,7 @@ async def handle_everything_else(message: types.Message, state: FSMContext):
         "Пожалуйста, используйте кнопки меню или команду /start",
         reply_markup=get_main_keyboard()
     )
+
 
 async def main():
     try:
