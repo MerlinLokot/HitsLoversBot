@@ -775,10 +775,16 @@ async def broadcast_message(message: types.Message):
     BATCH_SIZE = 20  # чуть меньше максимума для надежности
     DELAY = 1.1  # чуть больше секунды
 
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='✍️ Пройти', url='https://docs.google.com/forms/d/e/1FAIpQLSf8Dzs-02Ke0USpKO6V1blKrJV7FGFjhzl9Q0gARa_DKL9L1g/viewform?usp=dialog')]
+        ]
+    )
+
     MESSAGE = (
-        "🔥 <b>Вот и настал момент!</b> "
-        "💘 <b>14 февраля</b> 💘\n\n"
-        "✨ Раздел «Совместимость» доступен в главном меню"
+        "🌟 Всем привет! "
+        "Нам очень важно собрать вашу обратную связь по боту, "
+        "поэтому можете, пожалуйста, пройти форму (она анонимна)"
     )
 
     users = await db.get_all_user_ids()
@@ -787,7 +793,7 @@ async def broadcast_message(message: types.Message):
     
     for i, user_id in enumerate(users, 1):
         try:
-            await bot.send_message(user_id, MESSAGE, reply_markup=get_main_keyboard())
+            await bot.send_message(user_id, MESSAGE, reply_markup=keyboard)
             print(f"✓ {i}/{len(users)}", end='\r')
             
             if i % BATCH_SIZE == 0:
