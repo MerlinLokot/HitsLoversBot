@@ -772,19 +772,19 @@ async def send_valentine(callback: CallbackQuery, state: FSMContext, is_anonymou
 
 @dp.message(Command("broadcast"))
 async def broadcast_message(message: types.Message):
-    BATCH_SIZE = 20  # чуть меньше максимума для надежности
-    DELAY = 1.1  # чуть больше секунды
+    BATCH_SIZE = 20
+    DELAY = 1.1
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text='✍️ Пройти', url='https://docs.google.com/forms/d/e/1FAIpQLSf8Dzs-02Ke0USpKO6V1blKrJV7FGFjhzl9Q0gARa_DKL9L1g/viewform?usp=dialog')]
+            [InlineKeyboardButton(text='🌟 Отметиться', url='https://studprofcom.tsu.ru/event/den-svyatogo-programmista-ot-profbyuro-vitsh-ppos-tgu')]
         ]
     )
 
     MESSAGE = (
-        "🌟 Всем привет! "
-        "Нам очень важно собрать вашу обратную связь по боту, "
-        "поэтому можете, пожалуйста, пройти форму (она анонимна)"
+        "🔥 <b>Всем ещё раз привет!</b>\n\n❤️ Мероприятие прошло успешно, "
+        "поэтому вам осталось только отметиться в качестве участников на сайте профкома, "
+        "если вы состоите в Профсоюзе!"
     )
 
     users = await db.get_all_user_ids()
